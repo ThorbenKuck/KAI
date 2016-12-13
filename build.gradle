@@ -1,4 +1,4 @@
-group 'NetCom'
+group 'KAI'
 version '1.0-SNAPSHOT'
 
 apply plugin: 'java'
