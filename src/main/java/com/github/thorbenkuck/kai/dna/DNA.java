@@ -23,7 +23,7 @@ public abstract class DNA<T extends DNAComponent> implements Iterable<T> {
 
 	public void setAt(int index, T dnaComponent) {
 		if(index < 0 || index > components.length) {
-			throw new IllegalArgumentException("Trying to access a DNAComponent outside of the DNA");
+			throw new IllegalArgumentException("Trying to current a DNAComponent outside of the DNA");
 		}
 		if(components[index] == null) {
 			components[index] = new DNAElement<>(dnaComponent);

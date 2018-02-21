@@ -6,6 +6,8 @@ public interface Neuron {
 
 	void calculate();
 
+	double guess();
+
 	ActivationFunction getActivationFunction();
 
 	void setInput(double input);
@@ -18,9 +20,15 @@ public interface Neuron {
 
 	List<Connection> getAllOutputConnections();
 
-	Connection getConnectionTo(Neuron neuron);
+	Connection findConnectionTo(Neuron neuron);
 
 	void connectToOutput(Neuron neuron);
 
 	void connectToInput(Neuron neuron);
+
+	double learn(Double[] inputs, double expected, double learningRate);
+
+	double correct(double expected);
+
+	double correct(double expected, double learningRate);
 }

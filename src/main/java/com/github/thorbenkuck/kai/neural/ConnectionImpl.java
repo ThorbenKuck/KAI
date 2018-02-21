@@ -50,4 +50,16 @@ class ConnectionImpl implements Connection {
 			this.weight = weight;
 		}
 	}
+
+	@Override
+	public void addToWeight(double amount) {
+		synchronized (this) {
+			this.weight += amount;
+		}
+	}
+
+	@Override
+	public String toString() {
+		return source + " <-" + weight + "-> " + target;
+	}
 }

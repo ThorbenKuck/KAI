@@ -1,23 +1,21 @@
 package com.github.thorbenkuck.kai.neural;
 
-import java.util.ArrayList;
+import com.github.thorbenkuck.kai.math.Matrix;
+
 import java.util.List;
 
 public interface NeuralNetwork {
 
-	static NeuralNetwork create(Layer inputLayer, Layer outputLayer) {
-		return create(inputLayer, new ArrayList<>(), outputLayer);
-	}
+	Double[] feedForward(Double[] input);
 
-	static NeuralNetwork create(Layer inputLayer, List<Layer> hiddenLayer, Layer outputLayer) {
-		return new NeuralNetworkImpl(inputLayer, hiddenLayer, outputLayer);
-	}
+	double train(Double[] inputs, Double[] answer);
 
-	boolean train(List<Double[]> inputData, List<Double[]> outputData);
+	void reset();
 
-	List<Double> calculate(Double[] inputData);
+	void setLearningRate(double to);
 
-	List<Double> calculate(List<Double> inputData);
+	double getLearningRate();
 
-	void setMaxIterations(int maxIterations);
+	List<Matrix> matrixList();
+
 }

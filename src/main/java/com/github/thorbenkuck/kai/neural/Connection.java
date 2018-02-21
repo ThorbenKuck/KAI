@@ -33,4 +33,6 @@ public interface Connection {
 	void setDeltaWeight(double deltaWeight);
 
 	void setWeight(double newWeight);
+
+	void addToWeight(double amount);
 }
