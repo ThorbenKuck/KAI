@@ -10,11 +10,11 @@ public interface Neuron {
 
 	ActivationFunction getActivationFunction();
 
-	void setInput(double input);
+	void setInputValue(double input);
 
-	double getInput();
+	double getInputValue();
 
-	double getOutput();
+	double getOutputValue();
 
 	List<Connection> getAllInputConnections();
 
@@ -28,7 +28,17 @@ public interface Neuron {
 
 	double learn(Double[] inputs, double expected, double learningRate);
 
-	double correct(double expected);
+	double learn(double expected, double learningRate);
 
-	double correct(double expected, double learningRate);
+	boolean hasInputConnections();
+
+	boolean hasOutputConnection();
+
+	boolean isOutput();
+
+	boolean isInput();
+
+	void setError(double error);
+
+	double getError();
 }

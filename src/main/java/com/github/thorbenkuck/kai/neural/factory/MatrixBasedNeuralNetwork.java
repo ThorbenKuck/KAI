@@ -8,14 +8,14 @@ import com.github.thorbenkuck.kai.neural.implementation.SigmoidActivationFunctio
 
 import java.util.*;
 
-class NeuralNetworkImpl implements NeuralNetwork {
+class MatrixBasedNeuralNetwork implements NeuralNetwork {
 
 	private final List<Matrix> weightMatrices = new ArrayList<>();
 	private final List<Matrix> biasMatrices = new ArrayList<>();
 	private double learningRate = 0.1;
 	private ActivationFunction activationFunction = new SigmoidActivationFunction();
 
-	NeuralNetworkImpl(int inputNeurons, List<Integer> hiddenLayersNeurons, int outputNeurons) {
+	MatrixBasedNeuralNetwork(int inputNeurons, List<Integer> hiddenLayersNeurons, int outputNeurons) {
 		createMatrices(inputNeurons, hiddenLayersNeurons, outputNeurons);
 	}
 
@@ -36,28 +36,20 @@ class NeuralNetworkImpl implements NeuralNetwork {
 		}
 	}
 
-	@Override
-	public Double[] feedForward(final Double[] input) {
-		Matrix outputMatrix = Matrix.fromArray(input);
-
-		for (int i = 0; i < weightMatrices.size(); i++) {
-			Matrix weightMatrix = weightMatrices.get(i);
-			Matrix bias = biasMatrices.get(i);
-
-			// Apply the weights, and the bias to the input.
-			Matrix temp = Matrix.multiply(weightMatrix, outputMatrix);
-			temp.plus(bias);
-			temp.map(aDouble -> activationFunction.calculate(aDouble));
-
-			// Save the current matrix to be used in the next cycle
-			outputMatrix = temp;
-		}
+	private Double[] feedForward(final Double[] input) {
+		List<Matrix> result = calculateMatricesStepByStep(Matrix.fromArray(input));
+		Collections.reverse(result);
+		Matrix outputMatrix = result.get(0);
 
 		return outputMatrix.to1DArray();
 	}
 
+	@Override
+	public Double[] evaluate(final Double[] input) {
+		return feedForward(input);
+	}
+
 	private List<Matrix> calculateMatricesStepByStep(Matrix input) {
-		// redundant
 		final List<Matrix> result = new ArrayList<>();
 		result.add(input);
 		Matrix outputMatrix = input;
@@ -81,10 +73,10 @@ class NeuralNetworkImpl implements NeuralNetwork {
 
 	@Override
 	public double train(Double[] inputs, Double[] expectedResults) {
-		List<Matrix> allSteps = calculateMatricesStepByStep(Matrix.fromArray(inputs));
+		final List<Matrix> allSteps = calculateMatricesStepByStep(Matrix.fromArray(inputs));
 		Collections.reverse(allSteps);
-		Queue<Matrix> outputQueue = new LinkedList<>(allSteps);
-		Matrix targets = Matrix.fromArray(expectedResults);
+		final Queue<Matrix> outputQueue = new LinkedList<>(allSteps);
+		final Matrix targets = Matrix.fromArray(expectedResults);
 
 		int pointer = weightMatrices.size() - 1;
 
@@ -92,6 +84,7 @@ class NeuralNetworkImpl implements NeuralNetwork {
 		Matrix next = outputQueue.poll();
 		Matrix nextTranspose = Matrix.transpose(next);
 		Matrix outputError = Matrix.subtract(targets, outputs);
+		double sum = outputError.absoluteSum();
 		Matrix gradient = Matrix.map(outputs, aDouble -> activationFunction.calculateDerivative(aDouble));
 		gradient.times(outputError);
 		gradient.times(learningRate);
@@ -104,29 +97,39 @@ class NeuralNetworkImpl implements NeuralNetwork {
 		currentBias.plus(gradient);
 
 		Matrix lastWeights = currentWeights;
+
+		// CleanUp, to help with potential memory issues
+		gradient.clear();
+		nextTranspose.clear();
+
 		outputs = next;
 		--pointer;
 		while(outputQueue.peek() != null) {
-			currentWeights = weightMatrices.get(pointer);
-			currentBias = biasMatrices.get(pointer);
+			currentWeights = new Matrix(weightMatrices.get(pointer));
+			currentBias = new Matrix(biasMatrices.get(pointer));
 
 			Matrix transposedLastWeights = Matrix.transpose(lastWeights);
-			Matrix hiddenError = Matrix.multiply(transposedLastWeights, outputError);
-			Matrix hiddenGradient = Matrix.map(outputs, aDouble -> activationFunction.calculateDerivative(aDouble));
-			hiddenGradient.times(hiddenError);
-			hiddenGradient.times(learningRate);
+			outputError = Matrix.multiply(outputError, transposedLastWeights);
+			gradient = Matrix.map(outputs, aDouble -> activationFunction.calculateDerivative(aDouble));
+			gradient.times(outputError);
+			gradient.times(learningRate);
 
 			next = Matrix.transpose(outputQueue.poll());
-			weight_delta = Matrix.multiply(hiddenGradient, next);
+			weight_delta = Matrix.multiply(gradient, next);
 
 			currentWeights.plus(weight_delta);
-			currentBias.plus(hiddenGradient);
+			currentBias.plus(gradient);
+			lastWeights = currentWeights;
+
+			// CleanUp, to help with potential memory issues
+			transposedLastWeights.clear();
 
 			--pointer;
 		}
 
+		outputError.clear();
 
-		return outputError.absoluteSum();
+		return sum;
 	}
 
 	@Override
@@ -142,7 +145,7 @@ class NeuralNetworkImpl implements NeuralNetwork {
 
 	@Override
 	public void setLearningRate(final double to) {
-		this.learningRate = learningRate;
+		this.learningRate = to;
 	}
 
 	@Override
@@ -151,23 +154,13 @@ class NeuralNetworkImpl implements NeuralNetwork {
 	}
 
 	@Override
-	public List<Matrix> matrixList() {
-		return new ArrayList<>(weightMatrices);
+	public String toPrettyString() {
+		return toString();
 	}
 
 	@Override
 	public String toString() {
-		return "NeuralNetworkImpl{" + "weightMatrices=" + weightMatrices +
+		return "MatrixBasedNeuralNetwork{" + "weightMatrices=" + weightMatrices +
 				'}';
-	}
-
-	// Package private for factory
-	Collection<Layer> getAllLayer() {
-		final List<Layer> layers = new ArrayList<>();
-//		layers.add(inputLayer);
-//		layers.addAll(hiddenLayers);
-//		layers.add(outputLayer);
-
-		return Collections.unmodifiableCollection(layers);
 	}
 }

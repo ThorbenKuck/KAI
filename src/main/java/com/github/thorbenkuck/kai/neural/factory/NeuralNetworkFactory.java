@@ -6,6 +6,7 @@ public interface NeuralNetworkFactory {
 		return NNFCache.nnf;
 	}
 
-	NeuralNetworkFactoryLayers addInputLayer(int inputNeurons);
+	MatrixBasedNeuralNetworkFactory createMatrixBasedNN();
 
+	ObjectBasedNeuralNetworkFactory createObjectBasedNN();
 }

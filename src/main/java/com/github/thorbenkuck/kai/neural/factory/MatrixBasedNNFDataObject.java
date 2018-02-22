@@ -3,7 +3,7 @@ package com.github.thorbenkuck.kai.neural.factory;
 import java.util.ArrayList;
 import java.util.List;
 
-class NNFDataObject {
+class MatrixBasedNNFDataObject {
 
 	private final List<Integer> hiddenLayers = new ArrayList<>();
 	private int inputLayer;

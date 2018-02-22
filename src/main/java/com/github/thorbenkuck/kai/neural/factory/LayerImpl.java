@@ -1,6 +1,8 @@
 package com.github.thorbenkuck.kai.neural.factory;
 
+import com.github.thorbenkuck.kai.datatypes.QueuedIterator;
 import com.github.thorbenkuck.kai.math.Matrix;
+import com.github.thorbenkuck.kai.neural.Connection;
 import com.github.thorbenkuck.kai.neural.Layer;
 import com.github.thorbenkuck.kai.neural.Neuron;
 
@@ -9,9 +11,12 @@ import java.util.*;
 class LayerImpl implements Layer {
 
 	private final List<Neuron> neurons;
+	private Matrix lastGuess = new Matrix(0);
+	private Layer nextLayer;
+	private Layer previousLayer;
 
-	public LayerImpl(List<Neuron> neuronList) {
-		neurons = Collections.unmodifiableList(neuronList);
+	LayerImpl(List<Neuron> neuronList) {
+		neurons = new ArrayList<>(neuronList);
 	}
 
 	/**
@@ -21,65 +26,149 @@ class LayerImpl implements Layer {
 	 */
 	@Override
 	public Iterator<Neuron> iterator() {
-		return new QueuedIterator(neurons);
+		return new QueuedIterator<>(neurons);
 	}
 
-	private class QueuedIterator implements Iterator<Neuron> {
+	@Override
+	public int getNumberOfNeurons() {
+		return neurons.size();
+	}
 
-		private final Queue<Neuron> core;
-		private Neuron current;
+	@Override
+	public Neuron getNeuronAtIndex(final int index) {
+		return neurons.get(index);
+	}
 
-		private QueuedIterator(final Collection<Neuron> collection) {
-			this.core = new LinkedList<>(collection);
-		}
+	@Override
+	public void setNeuron(final int index, final Neuron neuron) {
+		neurons.set(index, neuron);
+	}
 
-		/**
-		 * Returns {@code true} if the iteration has more elements.
-		 * (In other words, returns {@code true} if {@link #next} would
-		 * return an element rather than throwing an exception.)
-		 *
-		 * @return {@code true} if the iteration has more elements
-		 */
-		@Override
-		public boolean hasNext() {
-			return core.peek() != null;
-		}
-
-		/**
-		 * Returns the next element in the iteration.
-		 *
-		 * @return the next element in the iteration
-		 * @throws NoSuchElementException if the iteration has no more elements
-		 */
-		@Override
-		public Neuron next() {
-			if (! hasNext()) {
-				throw new NoSuchElementException();
+	@Override
+	public void randomizeInputConnectionWeights() {
+		for (Neuron neuron : neurons) {
+			for (Connection connection : neuron.getAllInputConnections()) {
+				connection.setWeight(Connection.randomWeight());
+				connection.setDeltaWeight(Connection.randomWeight());
 			}
-			current = core.poll();
-			return current;
+			for (Connection connection : neuron.getAllOutputConnections()) {
+				connection.setWeight(Connection.randomWeight());
+				connection.setDeltaWeight(Connection.randomWeight());
+			}
+		}
+	}
+
+	@Override
+	public void randomizeOutputConnectionWeights() {
+		for (Neuron neuron : neurons) {
+			for (Connection connection : neuron.getAllOutputConnections()) {
+				connection.setWeight(Connection.randomWeight());
+				connection.setDeltaWeight(Connection.randomWeight());
+			}
+		}
+	}
+
+	@Override
+	public Matrix guess() {
+		List<Double> result = new ArrayList<>();
+		for (Neuron neuron : neurons) {
+			result.add(neuron.guess());
 		}
 
-		/**
-		 * Removes from the underlying collection the last element returned
-		 * by this iterator (optional operation).  This method can be called
-		 * only once per call to {@link #next}.  The behavior of an iterator
-		 * is unspecified if the underlying collection is modified while the
-		 * iteration is in progress in any way other than by calling this
-		 * method.
-		 *
-		 * @throws UnsupportedOperationException if the {@code remove}
-		 *                                       operation is not supported by this iterator
-		 * @throws IllegalStateException         if the {@code next} method has not
-		 *                                       yet been called, or the {@code remove} method has already
-		 *                                       been called after the last call to the {@code next}
-		 *                                       method
-		 * @implSpec The default implementation throws an instance of
-		 * {@link UnsupportedOperationException} and performs no other action.
-		 */
-		@Override
-		public void remove() {
-			neurons.remove(current);
+		lastGuess = Matrix.fromArray(result.toArray(new Double[result.size()]));
+		return lastGuess;
+	}
+
+	@Override
+	public Matrix getOutputs() {
+		List<Double> result = new ArrayList<>();
+		for (Neuron neuron : neurons) {
+			result.add(neuron.getOutputValue());
 		}
+
+		return Matrix.fromArray(result.toArray(new Double[result.size()]));
+	}
+
+	@Override
+	public void setInputData(Double[] data) {
+		for (int i = 0; i < data.length; i++) {
+			Double currentInput = data[i];
+			Neuron neuron = neurons.get(i);
+			neuron.setInputValue(currentInput);
+		}
+	}
+
+	@Override
+	public boolean isInput() {
+		for (Neuron neuron : neurons) {
+			if (!neuron.isInput()) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	@Override
+	public boolean isOutput() {
+		for (Neuron neuron : neurons) {
+			if (!neuron.isOutput()) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	@Override
+	public boolean isHidden() {
+		return ! isInput() && ! isOutput();
+	}
+
+	@Override
+	public Layer copy() {
+		return new LayerImpl(new ArrayList<>(neurons));
+	}
+
+	@Override
+	public Layer getNext() {
+		return nextLayer;
+	}
+
+	@Override
+	public Layer getPrevious() {
+		return previousLayer;
+	}
+
+	@Override
+	public void setNext(final Layer next) {
+		this.nextLayer = next;
+	}
+
+	@Override
+	public void setPrevious(final Layer previous) {
+		this.previousLayer = previous;
+	}
+
+	@Override
+	public List<Neuron> copyAllNeurons() {
+		return Collections.unmodifiableList(neurons);
+	}
+
+	@Override
+	public void resetError() {
+		for(Neuron neuron : neurons) {
+			neuron.setError(0.0);
+		}
+	}
+
+	@Override
+	public String toString() {
+		return " LayerImpl {" + "neurons =" + neurons + '}';
+	}
+
+	void applyNeurons(List<Neuron> neurons) {
+		this.neurons.clear();
+		this.neurons.addAll(neurons);
 	}
 }

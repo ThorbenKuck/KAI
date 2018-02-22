@@ -1,13 +1,11 @@
 package com.github.thorbenkuck.kai.neural.factory;
 
-class NeuralNetworkFactoryLayersImpl implements NeuralNetworkFactoryLayers {
+class MatrixBasedNeuralNetworkFactoryLayersImpl implements NeuralNetworkFactoryLayers {
 
-	private final NNFDataObject dataObject;
-	private final LayerFactory factory;
+	private final MatrixBasedNNFDataObject dataObject;
 
-	NeuralNetworkFactoryLayersImpl(final NNFDataObject dataObject, final LayerFactory factory) {
+	MatrixBasedNeuralNetworkFactoryLayersImpl(final MatrixBasedNNFDataObject dataObject) {
 		this.dataObject = dataObject;
-		this.factory = factory;
 	}
 
 	@Override
@@ -19,6 +17,6 @@ class NeuralNetworkFactoryLayersImpl implements NeuralNetworkFactoryLayers {
 	@Override
 	public NeuralNetworkFactoryFinalize addOutputLayer(final int numberNeurons) {
 		dataObject.setOutputLayer(numberNeurons);
-		return new NeuralNetworkFactoryFinalizeImpl(dataObject);
+		return new MatrixBasedNeuralNetworkFactoryFinalizeImpl(dataObject);
 	}
 }

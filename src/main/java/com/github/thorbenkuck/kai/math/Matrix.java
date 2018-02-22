@@ -7,7 +7,7 @@ import java.util.function.Function;
 
 public class Matrix {
 
-	private final double[][] data;
+	private double[][] data;
 	private int rows;
 	private int columns;
 
@@ -28,7 +28,12 @@ public class Matrix {
 	}
 
 	public static Matrix multiply(Matrix a, Matrix b) {
-		if (a.columns != b.rows) throw new RuntimeException("Illegal matrix dimensions.");
+		if (a.columns != b.rows) {
+			System.out.println(a);
+			System.out.println();
+			System.out.println(b);
+			throw new RuntimeException("Illegal matrix dimensions.");
+		}
 		Matrix c = new Matrix(a.rows, b.columns);
 		for (int i = 0; i < c.rows; i++) {
 			for (int j = 0; j < c.columns; j++) {
@@ -234,6 +239,20 @@ public class Matrix {
 
 	public boolean sameSize(Matrix a, Matrix b) {
 		return a.columns == b.columns && a.rows == b.rows;
+	}
+
+	public int getRows() {
+		return rows;
+	}
+
+	public int getColumns() {
+		return columns;
+	}
+
+	public void clear() {
+		this.data = null;
+		this.rows = 0;
+		this.columns = 0;
 	}
 
 	public Double[][] toArray() {

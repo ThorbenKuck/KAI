@@ -7,22 +7,15 @@ import com.github.thorbenkuck.kai.neural.Neuron;
 import java.util.LinkedList;
 import java.util.Queue;
 
-class NeuralNetworkFactoryFinalizeImpl implements NeuralNetworkFactoryFinalize {
+class ObjectBasedFinalizer implements NeuralNetworkFactoryFinalize {
 
-	private final NNFDataObject dataObject;
+	private final ObjectBasedNNFDataObject dataObject;
 
-	NeuralNetworkFactoryFinalizeImpl(final NNFDataObject dataObject) {
+	ObjectBasedFinalizer(final ObjectBasedNNFDataObject dataObject) {
 		this.dataObject = dataObject;
 	}
 
-	@Override
-	public NeuralNetwork create() {
-		NeuralNetworkImpl neuralNetwork = new NeuralNetworkImpl(dataObject.getInputLayer(), dataObject.getHiddenLayers(), dataObject.getOutputLayer());
-		connect(neuralNetwork);
-		return neuralNetwork;
-	}
-
-	private void connect(final NeuralNetworkImpl neuralNetwork) {
+	private void connect(final ObjectBasedNeuralNetwork neuralNetwork) {
 		final Queue<Layer> layers = new LinkedList<>(neuralNetwork.getAllLayer());
 
 		Layer currentSource = layers.poll();
@@ -30,6 +23,8 @@ class NeuralNetworkFactoryFinalizeImpl implements NeuralNetworkFactoryFinalize {
 		while(layers.peek() != null) {
 			Layer currentTarget = layers.poll();
 			connect(currentSource, currentTarget);
+			currentSource.setNext(currentTarget);
+			currentTarget.setPrevious(currentSource);
 			currentSource = currentTarget;
 		}
 	}
@@ -41,5 +36,12 @@ class NeuralNetworkFactoryFinalizeImpl implements NeuralNetworkFactoryFinalize {
 				targetNeuron.connectToInput(sourceNeuron);
 			}
 		}
+	}
+
+	@Override
+	public NeuralNetwork create() {
+		ObjectBasedNeuralNetwork neuralNetwork = new ObjectBasedNeuralNetwork(dataObject.getInputLayer(), dataObject.getHiddenLayers(), dataObject.getOutputLayer());
+		connect(neuralNetwork);
+		return neuralNetwork;
 	}
 }

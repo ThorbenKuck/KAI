@@ -1,44 +1,44 @@
 package com.github.thorbenkuck.kai;
 
-import com.github.thorbenkuck.kai.neural.NeuralNetwork;
-import com.github.thorbenkuck.kai.neural.NeuralNetworkTrainer;
+import com.github.thorbenkuck.kai.neural.*;
 import com.github.thorbenkuck.kai.neural.factory.NeuralNetworkFactory;
-import javafx.application.Application;
-import javafx.scene.Group;
-import javafx.scene.Scene;
-import javafx.scene.SceneAntialiasing;
-import javafx.scene.canvas.Canvas;
-import javafx.scene.image.PixelWriter;
-import javafx.scene.layout.HBox;
-import javafx.scene.layout.VBox;
-import javafx.scene.paint.Color;
-import javafx.scene.shape.Rectangle;
-import javafx.stage.Stage;
+import com.github.thorbenkuck.kai.neural.types.AbstractNeuron;
+import com.github.thorbenkuck.kai.neural.types.SupplierNeuron;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.function.BiConsumer;
+import java.util.concurrent.atomic.AtomicBoolean;
 
-//public class Example extends Application {
 public class Example {
 
 	private static final List<Double[]> inputData = new ArrayList<>();
 	private static final List<Double[]> outputData = new ArrayList<>();
-	private static final NeuralNetwork neuralNetwork = NeuralNetworkFactory.current()
+	private static final NeuralNetwork matrixNetwork = NeuralNetworkFactory.current()
+			.createMatrixBasedNN()
 			.addInputLayer(2)
+			.addHiddenLayer(2)
 			.addHiddenLayer(2)
 			.addOutputLayer(1)
 			.create();
-	private static final NeuralNetworkTrainer trainer = new NeuralNetworkTrainer();
-//	private int windowWidth = 800;
-//	private int windowHeight = 800;
-//	private int pixelDimensions = 400;
-//	private Rectangle[][] pixels;
+	private static final NeuralNetwork objectNetwork = NeuralNetworkFactory.current()
+			.createObjectBasedNN()
+			.addInputLayer(2)
+			.addHiddenLayer(10)
+			.addHiddenLayer(10)
+			.addHiddenLayer(10)
+			.addHiddenLayer(10)
+			.addOutputLayer(1)
+			.create();
+	private static final NeuralNetworkTrainer matrixTrainer = new NeuralNetworkTrainer();
+	private static final NeuralNetworkTrainer objectTrainer = new NeuralNetworkTrainer();
+	private static final SingleLayerTrainer singleLayerTrainer = new SingleLayerTrainer();
+	private static final AtomicBoolean listeningToUserInput = new AtomicBoolean(false);
+	private static final Thread listenerThread;
 
 	static {
 		inputData.add(new Double[] { 0.0, 0.0 });
@@ -51,26 +51,25 @@ public class Example {
 		outputData.add(new Double[] { 1.0 });
 		outputData.add(new Double[] { 0.0 });
 
-		neuralNetwork.setLearningRate(0.1);
-
-		Thread other = new Thread(Thread.currentThread().getThreadGroup(), () -> {
+		listeningToUserInput.set(true);
+		listenerThread = new Thread(Thread.currentThread().getThreadGroup(), () -> {
 			BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
-			String entered = "";
-			while (! entered.equals("stopNeuralNetwork")) {
+			while (listeningToUserInput.get()) {
 				try {
 					br.readLine();
-					entered = "stopNeuralNetwork";
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
+					matrixTrainer.stop();
+					objectTrainer.stop();
+					singleLayerTrainer.stop();
+				} catch (IOException ignored) {}
 			}
-			trainer.stop();
 		});
-		other.setName("TypingListenerThread");
-		other.start();
-		Thread.setDefaultUncaughtExceptionHandler((thread, exception) -> {
-			exception.printStackTrace(System.out);
-		});
+		listenerThread.setName("TypingListenerThread");
+		listenerThread.start();
+		Thread.setDefaultUncaughtExceptionHandler((thread, exception) -> exception.printStackTrace(System.out));
+	}
+
+	public static void main(String[] args) {
+		new Example().run();
 	}
 
 	private void printExpected() {
@@ -81,113 +80,138 @@ public class Example {
 		System.out.println();
 	}
 
-//	private synchronized void applyPixels() {
-//		int width = pixels.length;
-//		for (int x = 0; x < width ; x++) {
-//			int height = pixels[x].length;
-//			for (int y = 0; y < height ; y++) {
-//				Double xValue = ((x / (double) width) * 2) - 1;
-//				Double yValue = ((y / (double) height) * 2) - 1;
-//
-//				Double result = neuralNetwork.feedForward(new Double[] { xValue, yValue })[0];
-//				Rectangle rectangle = pixels[x][y];
-//				rectangle.setFill(Color.gray(result));
-//			}
-//		}
-//	}
+	private void printCalculated(NeuralNetwork neuralNetwork) {
+		System.out.println("Current Results for the given Problem: ");
+		for (Double[] input : inputData) {
+			Double[] calculated = neuralNetwork.evaluate(input);
+			long[] roundedCalculated = new long[calculated.length];
+			for(int i = 0 ; i < calculated.length ; i++) {
+				Double value = calculated[i];
+				roundedCalculated[i] = Math.round(value);
+			}
+			System.out.println(Arrays.toString(input) + " => " + Arrays.toString(calculated) + "(" + Arrays.toString(roundedCalculated) + ")");
+		}
+		System.out.println();
+	}
 
 	void run() {
-		trainer.setTrainingInputData(inputData);
-		trainer.setTrainingOutputData(outputData);
-		trainer.setIndefiniteTrainingEnd();
-		trainer.setProbingTime(10000);
+		testMatrixNetwork();
+//		testObjectNetwork();
+//		testSingleNeuron();
+		listeningToUserInput.set(false);
+	}
+
+	private void testObjectNetwork() {
+		objectTrainer.setTrainingInputData(inputData);
+		objectTrainer.setTrainingOutputData(outputData);
+		objectTrainer.setIndefiniteTrainingEnd();
+		objectTrainer.setProbingTime(10000);
+		objectTrainer.setMaximumError(0.0000000001);
+		objectNetwork.setLearningRate(0.1);
 
 		System.out.println("Starting Training of NN!");
-		System.out.println("Maximum Trainings cycles: " + trainer.getMaximumTrainingCycles());
-		System.out.println("Maximum error: " + trainer.getMaximumError());
+		System.out.println("Maximum Trainings cycles: " + objectTrainer.getMaximumTrainingCycles());
+		System.out.println("Maximum error: " + objectTrainer.getMaximumError());
 		printExpected();
+		System.out.println();
+		printCalculated(objectNetwork);
 		System.out.println("Start.");
 
-		trainer.train(neuralNetwork);
+		objectTrainer.train(objectNetwork);
 
-		System.out.println("[0, 0] => [" + Math.round(neuralNetwork.feedForward(new Double[] { 0.0, 0.0 })[0]) + "]");
-		System.out.println("[0, 1] => [" + Math.round(neuralNetwork.feedForward(new Double[] { 0.0, 1.0 })[0]) + "]");
-		System.out.println("[1, 0] => [" + Math.round(neuralNetwork.feedForward(new Double[] { 1.0, 0.0 })[0]) + "]");
-		System.out.println("[1, 1] => [" + Math.round(neuralNetwork.feedForward(new Double[] { 1.0, 1.0 })[0]) + "]");
+		System.out.println();
+		System.out.println();
+		System.out.println();
+		System.out.println();
+		System.out.println();
+		System.out.println();
+		System.out.println();
+		System.out.println();
+		System.out.println();
+		System.out.println("Training complete!.");
+		System.out.println();
+		System.out.println();
+		System.out.println();
+		System.out.println("Training took: " + objectTrainer.getCurrentIteration() + " with an error of: " + objectTrainer.getCurrentCalculatedError());
+
+		printExpected();
+		System.out.println();
+		printCalculated(objectNetwork);
 	}
 
-//	/**
-//	 * The main entry point for all JavaFX applications.
-//	 * The start method is called after the init method has returned,
-//	 * and after the system is ready for the application to begin running.
-//	 * <p>
-//	 * <p>
-//	 * NOTE: This method is called on the JavaFX Application Thread.
-//	 * </p>
-//	 *
-//	 * @param primaryStage the primary stage for this application, onto which
-//	 *                     the application scene can be set. The primary stage will be embedded in
-//	 *                     the browser if the application was launched as an applet.
-//	 *                     Applications may create other stages, if needed, but they will not be
-//	 *                     primary stages and will not be embedded in the browser.
-//	 */
-//	@Override
-//	public void start(final Stage primaryStage) throws Exception {
-//
-//		Group root = new Group();
-//
-//		Scene scene = new Scene(root, windowWidth, windowHeight, true, SceneAntialiasing.BALANCED);
-//		scene.setFill(Color.LIGHTBLUE);
-//
-//		pixels = new Rectangle[pixelDimensions][pixelDimensions];
-//		int rectangleWidth = windowWidth / pixelDimensions;
-//		int rectangleHeight = windowHeight / pixelDimensions;
-//
-//		VBox outer = new VBox();
-//		for (int i = 0; i < pixels.length; i++) {
-//			Rectangle[] currentRow = pixels[i];
-//			HBox currentRowBox = new HBox();
-//			for (int j = 0; j < currentRow.length; j++) {
-//				Rectangle rectangle = new Rectangle(rectangleWidth, rectangleHeight);
-//				rectangle.setFill(Color.gray(ThreadLocalRandom.current().nextDouble(0, 1)));
-//				pixels[i][j] = rectangle;
-//				currentRowBox.getChildren().add(rectangle);
-//			}
-//			outer.getChildren().add(currentRowBox);
-//		}
-//		root.getChildren().add(outer);
-//
-//		Stage stage = new Stage();
-//		stage.setScene(scene);
-//		stage.setWidth(windowWidth);
-//		stage.setHeight(windowHeight);
-//
-//		stage.show();
-//
-//		applyPixels();
-//
-//		new Thread(this::run).start();
-//	}
+	private void testMatrixNetwork() {
+		matrixTrainer.setTrainingInputData(inputData);
+		matrixTrainer.setTrainingOutputData(outputData);
+		matrixTrainer.setIndefiniteTrainingEnd();
+		matrixTrainer.setProbingTime(10000);
+		matrixTrainer.setMaximumError(0.00001);
 
-	public static void main(String[] args) {
-		new Example().run();
+		System.out.println("Starting Training of NN!");
+		System.out.println("Maximum Trainings cycles: " + matrixTrainer.getMaximumTrainingCycles());
+		System.out.println("Maximum error: " + matrixTrainer.getMaximumError());
+		printExpected();
+		System.out.println();
+		printCalculated(matrixNetwork);
+		System.out.println("Start.");
+
+		matrixTrainer.train(matrixNetwork);
+
+		System.out.println();
+		System.out.println();
+		System.out.println();
+		System.out.println();
+		System.out.println();
+		System.out.println();
+		System.out.println();
+		System.out.println();
+		System.out.println();
+		System.out.println("Training complete!.");
+		System.out.println();
+		System.out.println();
+		System.out.println();
+		System.out.println("Training took: " + matrixTrainer.getCurrentIteration() + " with an error of: " + matrixTrainer.getCurrentCalculatedError());
+
+		printExpected();
+		System.out.println();
+		printCalculated(matrixNetwork);
 	}
 
-	private class CanvasProbingConsumer implements BiConsumer<NeuralNetwork, NeuralNetworkTrainer> {
+	private void testSingleNeuron() {
+		Neuron orNeuron = new AbstractNeuron() {};
 
-		CanvasProbingConsumer() {
-		}
+		Neuron inputOne = new SupplierNeuron();
+		Neuron inputTwo = new SupplierNeuron();
 
-		/**
-		 * Performs this operation on the given arguments.
-		 *
-		 * @param neuralNetwork the first input argument
-		 * @param trainer       the second input argument
-		 */
-		@Override
-		public void accept(final NeuralNetwork neuralNetwork, final NeuralNetworkTrainer trainer) {
-			NeuralNetworkTrainer.DEFAULT_PROBING_CONSUMER.accept(neuralNetwork, trainer);
-//			applyPixels();
-		}
+		orNeuron.connectToInput(inputOne);
+		orNeuron.connectToInput(inputTwo);
+
+		final List<Double[]> inputData = new ArrayList<>();
+		inputData.add(new Double[]{0.0 , 0.0});
+		inputData.add(new Double[]{0.0 , 1.0});
+		inputData.add(new Double[]{1.0 , 0.0});
+		inputData.add(new Double[]{1.0 , 1.0});
+		final List<Double[]> outputData = new ArrayList<>();
+		outputData.add(new Double[]{0.0});
+		outputData.add(new Double[]{1.0});
+		outputData.add(new Double[]{1.0});
+		outputData.add(new Double[]{1.0});
+
+		singleLayerTrainer.train(Collections.singletonList(orNeuron), inputData, outputData);
+
+		inputOne.setInputValue(0.0);
+		inputOne.setInputValue(0.0);
+		System.out.println("[0, 0] => " + orNeuron.guess());
+
+		inputOne.setInputValue(0.0);
+		inputOne.setInputValue(1.0);
+		System.out.println("[0, 1] => " + orNeuron.guess());
+
+		inputOne.setInputValue(1.0);
+		inputOne.setInputValue(0.0);
+		System.out.println("[1, 0] => " + orNeuron.guess());
+
+		inputOne.setInputValue(1.0);
+		inputOne.setInputValue(1.0);
+		System.out.println("[1, 1] => " + orNeuron.guess());
 	}
 }

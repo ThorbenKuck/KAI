@@ -6,7 +6,7 @@ import java.util.List;
 
 public interface NeuralNetwork {
 
-	Double[] feedForward(Double[] input);
+	Double[] evaluate(Double[] input);
 
 	double train(Double[] inputs, Double[] answer);
 
@@ -16,6 +16,5 @@ public interface NeuralNetwork {
 
 	double getLearningRate();
 
-	List<Matrix> matrixList();
-
+	String toPrettyString();
 }

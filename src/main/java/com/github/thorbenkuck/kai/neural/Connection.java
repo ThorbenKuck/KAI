@@ -5,11 +5,11 @@ import java.util.concurrent.ThreadLocalRandom;
 public interface Connection {
 
 	static  Connection create(Neuron source, Neuron target) {
-		return new ConnectionImpl(source, target, randomWeight());
+		return create(source, target, randomWeight());
 	}
 
 	static Connection create(Neuron source, Neuron target, double weight) {
-		return new ConnectionImpl(source, target, weight);
+		return create(source, target, weight, randomWeight());
 	}
 
 	static  Connection create(Neuron source, Neuron target, double weight, double deltaWeight) {
@@ -19,7 +19,7 @@ public interface Connection {
 	}
 
 	static double randomWeight() {
-		return ((ThreadLocalRandom.current().nextDouble() * 2) -1);
+		return ThreadLocalRandom.current().nextDouble(-1, 1);
 	}
 
 	Neuron getSource();
@@ -35,4 +35,6 @@ public interface Connection {
 	void setWeight(double newWeight);
 
 	void addToWeight(double amount);
+
+	void fixWeight();
 }

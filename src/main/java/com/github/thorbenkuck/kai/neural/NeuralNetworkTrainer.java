@@ -1,5 +1,6 @@
 package com.github.thorbenkuck.kai.neural;
 
+import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -11,12 +12,14 @@ public class NeuralNetworkTrainer {
 	public static final BiConsumer<NeuralNetwork, NeuralNetworkTrainer> DEFAULT_ERROR_GROWTH_CONSUMER = new DefaultErrorConsumer();
 	public static final BiConsumer<NeuralNetwork, NeuralNetworkTrainer> DEFAULT_FAILED_TRAINING_CONSUMER = new SecondChanceStrategy();
 	public static final BiConsumer<NeuralNetwork, NeuralNetworkTrainer> DEFAULT_PROBING_CONSUMER = new DefaultProbingConsumer();
+	public static final int INDEFINITE_TRAINING_CYCLES = - 1;
 	private final List<Double[]> trainingInputData = new ArrayList<>();
 	private final List<Double[]> trainingOutputData = new ArrayList<>();
-	private long maxIterations = 10000000;
 	private final AtomicBoolean running = new AtomicBoolean(false);
-	private double maximumError = 0.00000000001;
+	private long maxIterations = 10000000;
+	private double maximumError = 0.001;
 	private int probingIndex = 1000;
+	private long errorRepetitionCount = 0;
 	private double calculatedError = 0;
 	private double lastCalculatedError = 0;
 	private int currentIteration = 0;
@@ -24,7 +27,17 @@ public class NeuralNetworkTrainer {
 	private BiConsumer<NeuralNetwork, NeuralNetworkTrainer> errorGrowthConsumer = DEFAULT_ERROR_GROWTH_CONSUMER;
 	private BiConsumer<NeuralNetwork, NeuralNetworkTrainer> failedTrainingConsumer = DEFAULT_FAILED_TRAINING_CONSUMER;
 	private BiConsumer<NeuralNetwork, NeuralNetworkTrainer> probingConsumer = DEFAULT_PROBING_CONSUMER;
+	private PrintStream outputStream = System.out;
 	private int stagnationCount = 0;
+
+	static void reset(NeuralNetwork neuralNetwork, NeuralNetworkTrainer trainer) {
+		trainer.outputStream.println("Resetting...");
+		neuralNetwork.reset();
+		neuralNetwork.setLearningRate(neuralNetwork.getLearningRate() * 0.95);
+		trainer.stop();
+		trainer.reset();
+		trainer.train(neuralNetwork);
+	}
 
 	private double trainWithAllData(NeuralNetwork neuralNetwork) {
 		double calculatedError = 0;
@@ -34,12 +47,19 @@ public class NeuralNetworkTrainer {
 			calculatedError += neuralNetwork.train(input, output);
 		}
 
-		// Todo, ist das 0.0?
 		return calculatedError / trainingInputData.size();
+	}
+
+	private boolean maxIterationsReached() {
+		return maxIterations != INDEFINITE_TRAINING_CYCLES && currentIteration >= maxIterations;
 	}
 
 	public double getMaximumError() {
 		return maximumError;
+	}
+
+	public void setMaximumError(double error) {
+		this.maximumError = error;
 	}
 
 	public double getCurrentCalculatedError() {
@@ -62,16 +82,12 @@ public class NeuralNetworkTrainer {
 		this.maxIterations = max;
 	}
 
-	public void setMaximumError(double error) {
-		this.maximumError = error;
-	}
-
 	public void setProbingTime(int iterationCycle) {
 		this.probingIndex = iterationCycle;
 	}
 
 	public void setAmountOfProbing(int howOftenToProbe) {
-		if(this.maxIterations != -1) {
+		if (this.maxIterations != - 1) {
 			setProbingTime(Math.round(maxIterations / howOftenToProbe));
 		} else {
 			setProbingTime(10000);
@@ -104,7 +120,7 @@ public class NeuralNetworkTrainer {
 	}
 
 	public void setIndefiniteTrainingEnd() {
-		maxIterations = -1;
+		maxIterations = INDEFINITE_TRAINING_CYCLES;
 	}
 
 	public void setTolerance(double errorTolerance) {
@@ -117,7 +133,7 @@ public class NeuralNetworkTrainer {
 
 	public void train(NeuralNetwork neuralNetwork) {
 		running.set(true);
-		if(trainingInputData.size() != trainingOutputData.size()) {
+		if (trainingInputData.size() != trainingOutputData.size()) {
 			throw new IllegalStateException("Provided input data and output data do not match!");
 		}
 		do {
@@ -126,34 +142,63 @@ public class NeuralNetworkTrainer {
 
 			if (currentIteration % probingIndex == 0) {
 				probingConsumer.accept(neuralNetwork, this);
-				if(lastCalculatedError < calculatedError) {
+				if (lastCalculatedError < calculatedError) {
+					++errorRepetitionCount;
 					errorGrowthConsumer.accept(neuralNetwork, this);
+				} else {
+					errorRepetitionCount = 0;
 				}
 			}
 			++ currentIteration;
 			lastCalculatedError = calculatedError;
 		} while ((calculatedError > maximumError && ! maxIterationsReached()) && running.get());
 
-		if(running.get() && calculatedError > maximumError) {
+		if (running.get() && calculatedError > maximumError) {
 			failedTrainingConsumer.accept(neuralNetwork, this);
 		}
 
 		running.set(false);
 	}
 
-	private boolean maxIterationsReached() {
-		return maxIterations != -1 && currentIteration >= maxIterations;
-	}
-
 	private static class DefaultErrorConsumer implements BiConsumer<NeuralNetwork, NeuralNetworkTrainer> {
 
 		@Override
 		public void accept(final NeuralNetwork neuralNetwork, final NeuralNetworkTrainer neuralNetworkTrainer) {
-			System.out.println("Growth in error by " + (neuralNetworkTrainer.lastCalculatedError - neuralNetworkTrainer.calculatedError) + " detected!");
+			neuralNetworkTrainer.outputStream.println("Growth in error by " + (neuralNetworkTrainer.calculatedError - neuralNetworkTrainer.lastCalculatedError) + " detected!");
+			if(neuralNetworkTrainer.errorRepetitionCount >= 100) {
+				neuralNetworkTrainer.outputStream.println("To many error growths in a row detected..");
+				neuralNetworkTrainer.errorRepetitionCount = 0;
+				if(!resultsAreAcceptable(neuralNetwork, neuralNetworkTrainer)) {
+					neuralNetworkTrainer.outputStream.println("Results are not acceptable! resetting!");
+					reset(neuralNetwork, neuralNetworkTrainer);
+				} else {
+					neuralNetworkTrainer.outputStream.println("Results are looking okay.. Continue.");
+				}
+			}
 		}
 	}
 
+	private static boolean resultsAreAcceptable(NeuralNetwork neuralNetwork, NeuralNetworkTrainer trainer) {
+		trainer.outputStream.println("Looking for a second chance..");
+		for (int i = 0; i < trainer.trainingInputData.size(); i++) {
+			Double[] inputData = trainer.trainingInputData.get(i);
+			Double[] outputData = trainer.trainingOutputData.get(i);
+			Double[] calculated = neuralNetwork.evaluate(inputData);
+			trainer.outputStream.println(Arrays.toString(inputData) + " => " + Arrays.toString(calculated) + " ( " + Arrays.toString(outputData) + " + " + trainer.tolerance + " )");
+			for (int j = 0; j < outputData.length; j++) {
+				Double expectedData = outputData[j];
+				Double calculatedData = calculated[j];
+				if (! (Math.abs(expectedData - calculatedData) < trainer.tolerance)) {
+					return false;
+				}
+			}
+		}
+		return true;
+	}
+
 	private static class SecondChanceStrategy implements BiConsumer<NeuralNetwork, NeuralNetworkTrainer> {
+
+
 
 		/**
 		 * Performs this operation on the given arguments.
@@ -163,39 +208,14 @@ public class NeuralNetworkTrainer {
 		 */
 		@Override
 		public void accept(final NeuralNetwork neuralNetwork, final NeuralNetworkTrainer neuralNetworkTrainer) {
-			if(! resultsAreAcceptable(neuralNetwork, neuralNetworkTrainer)) {
-				System.out.println("X");
-				System.out.println("Second chance not applicable. Restart training!");
+			if (! resultsAreAcceptable(neuralNetwork, neuralNetworkTrainer)) {
+				neuralNetworkTrainer.outputStream.println("X");
+				neuralNetworkTrainer.outputStream.println("Second chance not applicable. Restart training!");
 				reset(neuralNetwork, neuralNetworkTrainer);
 			}
 		}
 
-		private boolean resultsAreAcceptable(NeuralNetwork neuralNetwork, NeuralNetworkTrainer trainer) {
-			System.out.println("Looking for a second chance..");
-			for(int i = 0 ; i < trainer.trainingInputData.size() ; i++) {
-				Double[] inputData = trainer.trainingInputData.get(i);
-				Double[] outputData = trainer.trainingOutputData.get(i);
-				Double[] calculated = neuralNetwork.feedForward(inputData);
-				System.out.println(Arrays.toString(inputData) + " => " + Arrays.toString(calculated) + " ( " + Arrays.toString(outputData) + " + " + trainer.tolerance + " )");
-				for(int j = 0 ; j < outputData.length ; j++) {
-					Double expectedData = outputData[j];
-					Double calculatedData = calculated[j];
-					if(!(Math.abs(expectedData - calculatedData) < trainer.tolerance)) {
-						return false;
-					}
-				}
-			}
-			return true;
-		}
-	}
 
-	static void reset(NeuralNetwork neuralNetwork, NeuralNetworkTrainer trainer) {
-		System.out.println("Resetting...");
-		neuralNetwork.reset();
-		neuralNetwork.setLearningRate(neuralNetwork.getLearningRate() * 0.95);
-		trainer.stop();
-		trainer.reset();
-		trainer.train(neuralNetwork);
 	}
 
 	private static class DefaultProbingConsumer implements BiConsumer<NeuralNetwork, NeuralNetworkTrainer> {
@@ -203,21 +223,25 @@ public class NeuralNetworkTrainer {
 		/**
 		 * Performs this operation on the given arguments.
 		 *
-		 * @param neuralNetwork        the first input argument
+		 * @param neuralNetwork the first input argument
 		 */
 		@Override
 		public void accept(final NeuralNetwork neuralNetwork, final NeuralNetworkTrainer trainer) {
-			System.out.println("error after (" + trainer.currentIteration + "/" + trainer.maxIterations + ") trainings-cycles: " + trainer.calculatedError);
+			trainer.outputStream.println("error after (" + trainer.currentIteration + "/" + trainer.maxIterations + ") trainings-cycles: " + trainer.calculatedError);
 			if ((trainer.calculatedError * 2) < trainer.lastCalculatedError) {
-				System.out.println("Big jump in effectiveness of Neural Network detected! Resetting iteration count");
-				trainer.currentIteration = 0;
+				if (trainer.maxIterations == trainer.INDEFINITE_TRAINING_CYCLES) {
+					trainer.outputStream.println("Big jump in effectiveness of Neural Network detected!");
+				} else {
+					trainer.outputStream.println("Big jump in effectiveness of Neural Network detected! Resetting iteration count");
+					trainer.currentIteration = 0;
+				}
 			}
 
-			if(trainer.calculatedError == trainer.lastCalculatedError) {
-				System.out.println("STAGNATION DETECTED!");
-				++trainer.stagnationCount;
-				if(trainer.stagnationCount >= 10) {
-					System.out.println("reset imminent");
+			if (trainer.calculatedError == trainer.lastCalculatedError) {
+				trainer.outputStream.println("STAGNATION DETECTED!");
+				++ trainer.stagnationCount;
+				if (trainer.stagnationCount >= 10) {
+					trainer.outputStream.println("reset imminent");
 					reset(neuralNetwork, trainer);
 				}
 			} else {
